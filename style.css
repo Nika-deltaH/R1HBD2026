@@ -394,28 +394,60 @@ canvas {
     font-size: 14px;
 }
 
-/* Footer Links */
-.footer-links {
-    position: absolute;
-    bottom: calc(env(safe-area-inset-bottom) + 20px);
-    left: 0;
+/* Support Links (Game Over Screen) */
+.support-links-mini {
     width: 100%;
+    margin-top: 15px;
     display: flex;
-    gap: 15px;
     justify-content: center;
-    flex-wrap: wrap;
-    z-index: 10;
+    gap: 20px;
 }
 
-.footer-links a {
-    color: rgba(255, 255, 255, 0.7);
-    text-decoration: none;
-    font-size: 11px;
+.support-links-mini a {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 12px;
+    text-decoration: underline;
     transition: color 0.2s;
 }
 
-.footer-links a:hover {
+.support-links-mini a:hover {
     color: white;
+}
+
+/* Settings Support Section */
+.support-section {
+    margin-top: 25px;
+    padding-top: 15px;
+    border-top: 1px solid #555;
+}
+
+.support-section p {
+    font-size: 14px;
+    color: #aaa;
+    margin-bottom: 12px;
+}
+
+.support-btns {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.support-btn {
+    background: #444;
+    color: white;
+    padding: 10px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-size: 14px;
+    transition: all 0.2s;
+    border: 1px solid #555;
+}
+
+.support-btn:hover {
+    background: #555;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
 }
 
 /* In-Game Modals (CM/ED) */

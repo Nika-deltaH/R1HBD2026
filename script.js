@@ -7,7 +7,7 @@ const GAME_H = 680;           // Canvas height
 // Layout (all Y values are canvas-space, top = 0)
 const UI_HEIGHT = 50;     // Top UI bar (score / next)
 const GAMEOVER_Y = 180;     // Game over line (invisible, = UI_HEIGHT)
-const WARNING_LINE_Y = 190;    // Static gray line, always visible (10px below gameover)
+const WARNING_LINE_Y = 193;    // Static gray line, always visible (10px below gameover)
 const WARNING_TRIGGER_Y = 205;  // Triggers warning flag (15px below gray line)
 const FIELD_TOP = WARNING_LINE_Y;     // Same as WARNING_LINE_Y
 const FIELD_BOTTOM = 600;    // Bottom wall inner face
@@ -18,7 +18,7 @@ const WALL_THICKNESS = 30;
 
 // Sizes: 25, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130 (Diameters)
 // Radii: 12.5, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65
-const BALL_RADII = [15, 20, 25, 30, 35, 40, 45, 52, 61, 72, 85, 100, 117];
+const BALL_RADII = [15, 20, 25, 30, 35, 50, 45, 52, 61, 72, 85, 100, 117];
 
 // Placeholder Colors
 const BALL_COLORS = [
@@ -154,6 +154,24 @@ function makeWalls() {
     ];
 }
 
+function createCapsule(x, y, radius, renderConfig) {
+    const r = radius * 0.4; // Horizontal radius (0.4x width)
+    const offset = radius - r; // Vertical offset for centers of outer circles
+
+    // Create 3 overlapping circles to form a vertical capsule
+    const c1 = Bodies.circle(x, y - offset, r);
+    const c2 = Bodies.circle(x, y, r);
+    const c3 = Bodies.circle(x, y + offset, r);
+
+    return Body.create({
+        parts: [c1, c2, c3],
+        restitution: 0.7,
+        friction: 0.05,
+        frictionAir: 0.01,
+        render: { visible: false }
+    });
+}
+
 function init() {
     // Create Engine
     engine = Engine.create({
@@ -215,7 +233,33 @@ function init() {
             ctx.setLineDash([]);
         }
 
-        // 5. Preview Ball
+        // 5. Drawing All Physical Balls (Images)
+        const bodies = Composite.allBodies(engine.world);
+        bodies.forEach(body => {
+            if (body.level === undefined || body.isStatic) return;
+
+            if (USE_IMAGES) {
+                const imageIndex = String(body.level + 1).padStart(3, '0');
+                const img = ASSET_IMAGES[imageIndex];
+                if (img) {
+                    const r = BALL_RADII[body.level];
+                    const size = r * 2;
+                    ctx.save();
+                    ctx.translate(body.position.x, body.position.y);
+                    ctx.rotate(body.angle);
+                    ctx.drawImage(img, -r, -r, size, size);
+                    ctx.restore();
+                }
+            } else {
+                // Fallback for no images
+                ctx.beginPath();
+                ctx.arc(body.position.x, body.position.y, body.circleRadius || BALL_RADII[body.level], 0, 2 * Math.PI);
+                ctx.fillStyle = BALL_COLORS[body.level];
+                ctx.fill();
+            }
+        });
+
+        // 6. Preview Ball (Current held ball)
         if (previewBall && isPlaying) {
             if (USE_IMAGES) {
                 const imageIndex = String(previewBall.level + 1).padStart(3, '0');
@@ -272,7 +316,8 @@ function init() {
         bodies.forEach(body => {
             if (body.isStatic) return;
 
-            const topEdge = body.position.y - body.circleRadius;
+            // Use actual physics bounds for accurate edge detection (especially for capsule/ellipses)
+            const topEdge = body.bounds.min.y;
 
             // Warning Check: top edge above WARNING_TRIGGER_Y
             if (topEdge < WARNING_TRIGGER_Y) {
@@ -293,8 +338,13 @@ function init() {
             // Pop Animation
             if (body.isPopping) {
                 const targetRadius = BALL_RADII[body.level];
-                if (body.circleRadius > targetRadius + 0.5) {
+                // For composite bodies (capsule), scaling might be complex, 
+                // but Matter.js Body.scale handles parts recursively.
+                if (body.circleRadius && body.circleRadius > targetRadius + 0.5) {
                     Body.scale(body, 0.95, 0.95);
+                } else if (!body.circleRadius) {
+                    // Fallback for composite
+                    body.isPopping = false;
                 } else {
                     body.isPopping = false;
                 }
@@ -470,12 +520,16 @@ function shoot() {
     // Clamp spawn X inside play field
     const spawnX = Math.max(FIELD_LEFT + previewBall.radius, Math.min(FIELD_RIGHT - previewBall.radius, previewBall.x));
 
-    const body = Bodies.circle(spawnX, DROP_Y, previewBall.radius, {
-        restitution: 0.7,
-        friction: 0.05,
-        frictionAir: 0.01,
-        render: renderConfig
-    });
+    if (previewBall.level === 5) {
+        body = createCapsule(spawnX, DROP_Y, previewBall.radius);
+    } else {
+        body = Bodies.circle(spawnX, DROP_Y, previewBall.radius, {
+            restitution: 0.7,
+            friction: 0.05,
+            frictionAir: 0.01,
+            render: { visible: false }
+        });
+    }
 
     body.level = previewBall.level;
     lastShotBodyId = body.id;
@@ -525,12 +579,17 @@ function mergeBalls(bodyA, bodyB) {
         fillStyle: BALL_COLORS[newLevel]
     };
 
-    const newBody = Bodies.circle(midX, midY, radius, {
-        restitution: 0.7,
-        friction: 0.05,
-        frictionAir: 0.02,
-        render: renderConfig
-    });
+    let newBody;
+    if (newLevel === 5) {
+        newBody = createCapsule(midX, midY, radius);
+    } else {
+        newBody = Bodies.circle(midX, midY, radius, {
+            restitution: 0.7,
+            friction: 0.05,
+            frictionAir: 0.02,
+            render: { visible: false }
+        });
+    }
     newBody.level = newLevel;
     Body.setVelocity(newBody, { x: (Math.random() - 0.5), y: (Math.random() - 0.5) });
 
