@@ -368,8 +368,8 @@ function init() {
     Events.on(engine, 'collisionStart', (event) => {
         const pairs = event.pairs;
         for (let i = 0; i < pairs.length; i++) {
-            const bodyA = pairs[i].bodyA;
-            const bodyB = pairs[i].bodyB;
+            const bodyA = pairs[i].bodyA.parent; // Use parent for composite body support
+            const bodyB = pairs[i].bodyB.parent;
 
             if (bodyA.level !== undefined && bodyB.level !== undefined) {
                 if (bodyA.level === bodyB.level && bodyA.level < 12) { // 13 levels (0-12)
