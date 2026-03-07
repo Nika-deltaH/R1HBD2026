@@ -6,7 +6,7 @@ const GAME_H = 680;           // Canvas height
 
 // Layout (all Y values are canvas-space, top = 0)
 const UI_HEIGHT = 50;     // Top UI bar (score / next)
-const GAMEOVER_Y = 180;     // Game over line (invisible, = UI_HEIGHT)
+const GAMEOVER_Y = 580;     // Game over line (invisible, = UI_HEIGHT)
 const WARNING_LINE_Y = 193;    // Static gray line, always visible (10px below gameover)
 const WARNING_TRIGGER_Y = 205;  // Triggers warning flag (15px below gray line)
 const FIELD_TOP = WARNING_LINE_Y;     // Same as WARNING_LINE_Y
@@ -762,56 +762,82 @@ document.addEventListener('visibilitychange', () => {
 
 
 if (screenshotBtn) {
-    screenshotBtn.addEventListener('click', () => {
-        // Manual Screenshot Composition
-        // 1. Create a temporary canvas
+    screenshotBtn.addEventListener('click', async () => {
+        const gameCanvas = document.querySelector('#game-container canvas');
+        if (!gameCanvas) return;
+
         const captureCanvas = document.createElement('canvas');
-        const gameCanvas = document.querySelector('#game-container canvas'); // Matter.js canvas
-
-        if (!gameCanvas) {
-            alert('Game canvas not found!');
-            return;
-        }
-
         captureCanvas.width = gameCanvas.width;
-        captureCanvas.height = gameCanvas.height + 150; // Extra height for Header/Footer info
+        captureCanvas.height = gameCanvas.height + 50; // Extra room for header & footer
         const ctx = captureCanvas.getContext('2d');
 
-        // 2. Fill Background
-        ctx.fillStyle = '#222';
+        // 1. Fill Background (Match body color)
+        ctx.fillStyle = '#88b1cc';
         ctx.fillRect(0, 0, captureCanvas.width, captureCanvas.height);
 
-        // 3. Draw Header Info manually (Since we can't capture HTML easily without html2canvas issues)
-        // Center the content vertically/horizontally
+        // 2. Remove manual BK Draw - it's already inside gameCanvas at (0, 190)
+        // Which translates to (0, 120 + 190) in captureCanvas
+
+        // 3. Draw Header "Game Over" (CSS Style)
         const centerX = captureCanvas.width / 2;
-
-        ctx.fillStyle = '#ff4444';
-        ctx.font = 'bold 48px Arial';
         ctx.textAlign = 'center';
-        ctx.lineWidth = 2;
+
+        // Title text
+        ctx.fillStyle = '#ff4444';
+        ctx.font = 'bold 42px Arial';
+        ctx.lineWidth = 4;
         ctx.strokeStyle = 'white';
-        ctx.strokeText('Game Over', centerX, 60);
-        ctx.fillText('Game Over', centerX, 60);
+        ctx.strokeText('Game Over', centerX, 50);
+        ctx.fillText('Game Over', centerX, 50);
 
+        // Score text
         ctx.fillStyle = 'white';
-        ctx.font = 'bold 36px Arial';
-        ctx.fillText('Score: ' + score, centerX, 110);
+        ctx.font = 'bold 28px Arial';
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur = 3;
+        ctx.fillText('Score: ' + score, centerX, 95);
+        ctx.shadowBlur = 0; // Reset shadow
 
-        // 4. Draw Game Canvas
-        // Position it below the header
-        const gameY = 150;
+        // 4. Draw Game Area (Shifted up to tighten gap)
+        const gameY = 10;
         ctx.drawImage(gameCanvas, 0, gameY);
 
-        // 5. Download
+        // 5. Draw Footer Copyright
+        ctx.fillStyle = 'white';
+        ctx.font = '14px Arial';
+        ctx.fillText('Nika © nikaworx.com', centerX, captureCanvas.height - 15);
+
         try {
-            const dataURL = captureCanvas.toDataURL('image/PNG');
+            const dataURL = captureCanvas.toDataURL('image/png');
+
+            // Check if mobile and navigator.share supports files
+            if (navigator.share && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+                const blob = await (await fetch(dataURL)).blob();
+                const file = new File([blob], `R1HBD_Score_${score}.png`, { type: 'image/png' });
+
+                if (navigator.canShare && navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'R1HBD2026 Score',
+                        text: `Check out my score: ${score}!`
+                    });
+                    return; // Shared, exit
+                }
+            }
+
+            // Fallback for Desktop: Normal download
             const link = document.createElement('a');
-            link.download = `ComboGame_Score_${score}.PNG`;
+            link.download = `R1HBD2026_Score_${score}.png`;
             link.href = dataURL;
             link.click();
+
         } catch (err) {
-            console.error(err);
-            alert('Screenshot failed. If you are running locally (file://), browsers verify security. Please try on a local server or GitHub Pages.');
+            console.error('Screenshot error:', err);
+            if (window.location.protocol === 'file:') {
+                alert('【本地端安全限制】\n由於瀏覽器安全限制，直接點擊實體檔案開啟無法執行截圖功能。\n請使用 VS Code 的 Live Server 擴充功能開啟，或等上傳至伺服器(如 GitHub Pages)後再行測試！');
+            } else {
+                alert('截圖失敗。請嘗試在手機瀏覽器中進行測試。');
+            }
         }
     });
 }
