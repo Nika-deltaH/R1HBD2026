@@ -6,7 +6,7 @@ const GAME_H = 680;           // Canvas height
 
 // Layout (all Y values are canvas-space, top = 0)
 const UI_HEIGHT = 50;     // Top UI bar (score / next)
-const GAMEOVER_Y = 580;     // Game over line (invisible, = UI_HEIGHT)
+const GAMEOVER_Y = 180;     // Game over line (invisible, = UI_HEIGHT)
 const WARNING_LINE_Y = 193;    // Static gray line, always visible (10px below gameover)
 const WARNING_TRIGGER_Y = 205;  // Triggers warning flag (15px below gray line)
 const FIELD_TOP = WARNING_LINE_Y;     // Same as WARNING_LINE_Y
