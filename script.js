@@ -18,7 +18,7 @@ const WALL_THICKNESS = 30;
 
 // Sizes: 25, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130 (Diameters)
 // Radii: 12.5, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65
-const BALL_RADII = [15, 20, 25, 30, 35, 50, 45, 52, 61, 72, 85, 100, 117];
+const BALL_RADII = [15, 20, 25, 30, 35, 50, 45, 50, 56, 63, 71, 80, 90];
 
 // Placeholder Colors
 const BALL_COLORS = [
