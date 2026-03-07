@@ -297,67 +297,6 @@ canvas {
     }
 }
 
-/* Level Up Animation */
-.level-up-container {
-    position: absolute;
-    top: 25%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 28px;
-    font-weight: bold;
-    color: #ffeb3b;
-    text-shadow: 0 0 5px #ff9800, 2px 2px 4px #000;
-    opacity: 0;
-}
-
-.level-up-anim {
-    animation: lvlUpPopIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards,
-        lvlUpFadeOut 0.5s ease-in 1.5s forwards;
-}
-
-.level-up-anim .arrow {
-    display: inline-block;
-    animation: arrowFloat 0.8s ease-out 0.8s forwards;
-}
-
-@keyframes lvlUpPopIn {
-    0% {
-        opacity: 0;
-        transform: translate(-50%, -50%) scale(0);
-    }
-
-    100% {
-        opacity: 1;
-        transform: translate(-50%, -50%) scale(1);
-    }
-}
-
-@keyframes lvlUpFadeOut {
-    0% {
-        opacity: 1;
-    }
-
-    100% {
-        opacity: 0;
-    }
-}
-
-@keyframes arrowFloat {
-    0% {
-        transform: translateY(0);
-        opacity: 1;
-    }
-
-    100% {
-        transform: translateY(-30px);
-        opacity: 0;
-    }
-}
 
 /* Next Balls Preview UI */
 #next-preview-container {
@@ -429,11 +368,12 @@ canvas {
 
 .support-btns {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     gap: 10px;
 }
 
 .support-btn {
+    flex: 1;
     background: #444;
     color: white;
     padding: 10px;
@@ -463,11 +403,22 @@ canvas {
     justify-content: center;
     align-items: center;
     backdrop-filter: blur(3px);
+    animation: backdropFadeIn 0.3s ease-out;
+}
+
+@keyframes backdropFadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 .modal-box {
-    width: 250px;
-    height: 300px;
+    width: 300px;
+    height: 360px;
     background-size: cover;
     background-position: center;
     border-radius: 12px;
@@ -475,6 +426,31 @@ canvas {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     border: 3px solid #fff;
     overflow: hidden;
+    animation: modalPopIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+.ed-box {
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-color: #fff;
+    /* White background to fill gaps */
+}
+
+@keyframes modalPopIn {
+    0% {
+        transform: scale(0);
+        opacity: 0;
+    }
+
+    70% {
+        transform: scale(1.2);
+    }
+
+    100% {
+        transform: scale(1);
+        opacity: 1;
+    }
 }
 
 .close-modal-btn {
