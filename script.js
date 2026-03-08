@@ -53,7 +53,14 @@ const CM_DATA = [
     { img: 'cm_02', link: 'https://youtube.com/shorts/jKMBcdd-oac?si=-jFzEUbNKsEFHv_2' }, //水痘與帶狀疱疹(玫瑰花瓣上的露珠)
     { img: 'cm_03', link: 'https://youtube.com/shorts/XI5j6NeBA9g?si=B94VK5XYgSzy2T42' }, //成人篩檢肝腎功能尿酸
     { img: 'cm_04', link: 'https://www.youtube.com/watch?v=PdWnGcRcjWo' }, //左流右新健康安心
-    { img: 'cm_05', link: 'https://www.youtube.com/watch?v=ky8im62Jjfs' }, //預防泌尿道感染
+    { img: 'cm_05', link: 'https://www.youtube.com/watch?v=W6auYLrj7KI' }, //實寫注意!深入了解大腸癌
+    { img: 'cm_06', link: 'https://www.youtube.com/watch?v=svqq5stpB_Q' }, //頭家，來一份快樂套餐!
+    { img: 'cm_07', link: 'https://www.youtube.com/watch?v=C1w9VIBF3x4' }, //憂鬱絕對不是不知足!
+    { img: 'cm_08', link: 'https://www.youtube.com/watch?v=lrefLk3I69Q' }, //肌少症從0開始的預防保健
+    { img: 'cm_09', link: 'https://www.youtube.com/watch?v=gd_T7zTUCec' }, //原來我也有乳糖不耐症?!
+    { img: 'cm_10', link: 'https://www.youtube.com/watch?v=KIvaI2PQ-Hs' }, //如果早知道偶像也會脂肪肝
+    { img: 'cm_11', link: 'https://www.youtube.com/watch?v=ByjnjtJOrJI' }, //結石也是病痛起來要人命
+    { img: 'cm_12', link: 'https://www.youtube.com/watch?v=VDctL-3fPpA' }, //寶寶的十萬個為什麼
 ];
 
 // Upcoming queue
@@ -95,18 +102,50 @@ const IMAGES_TO_LOAD = [
     'assets/005.PNG', 'assets/006.PNG', 'assets/007.PNG', 'assets/008.PNG',
     'assets/009.PNG', 'assets/010.PNG', 'assets/011.PNG', 'assets/012.PNG',
     'assets/013.PNG', 'assets/bk.png',
-    'assets/cm_01.jpg', 'assets/cm_02.jpg', 'assets/cm_03.jpg', 'assets/cm_04.jpg', 'assets/cm_05.jpg',
+    'assets/cm_01.png', 'assets/cm_02.png', 'assets/cm_03.png', 'assets/cm_04.png', 'assets/cm_05.png',
+    'assets/cm_06.png', 'assets/cm_07.png', 'assets/cm_08.png', 'assets/cm_09.png', 'assets/cm_10.png',
+    'assets/cm_11.png', 'assets/cm_12.png',
     'assets/ed_01.jpg', 'assets/ed_02.jpg', 'assets/ed_03.jpg', 'assets/ed_04.jpg'
 ];
 const ASSET_IMAGES = {}; // Cache for preloaded images
+
+// Audio Context (for mobile volume control)
+let audioCtx = null;
+let bgmGainNode = null;
+let sfxGainNode = null;
+let bgmSourceNode = null;
 
 // Audio Init Volume
 let bgmVolume = 0.5;
 let sfxVolume = 1.0;
 
-bgm.volume = bgmVolume;
-clickSound.volume = sfxVolume;
-mergeSound.volume = sfxVolume;
+function initAudioContext() {
+    if (audioCtx) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        return;
+    }
+
+    try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        // Setup SFX Master Gain
+        sfxGainNode = audioCtx.createGain();
+        sfxGainNode.gain.value = sfxVolume;
+        sfxGainNode.connect(audioCtx.destination);
+
+        // Setup BGM Master Gain & Source
+        bgmGainNode = audioCtx.createGain();
+        bgmGainNode.gain.value = bgmVolume;
+        bgmSourceNode = audioCtx.createMediaElementSource(bgm);
+        bgmSourceNode.connect(bgmGainNode);
+        bgmGainNode.connect(audioCtx.destination);
+
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+    } catch (e) {
+        console.error('Web Audio API not supported:', e);
+    }
+}
+
 
 async function preloadAssets() {
     let loadedCount = 0;
@@ -415,6 +454,8 @@ function handleInput(e) {
     if (e.type === 'touchstart') e.preventDefault();
     if (isGameOver) return;
 
+    initAudioContext();
+
     if (!isPlaying) {
         isPlaying = true;
         const msg = document.getElementById('start-message');
@@ -424,7 +465,7 @@ function handleInput(e) {
         updateNextPreviewUI();
 
         // Try play BGM on first interaction
-        if (bgm.paused && bgm.volume > 0) {
+        if (bgm.paused && bgmVolume > 0) {
             bgm.play().catch(e => console.log("BGM waiting for interaction"));
         }
     }
@@ -440,6 +481,7 @@ function handleInput(e) {
 
     shoot();
 }
+
 
 function showStartMessage() {
     const existingMsg = document.getElementById('start-message');
@@ -487,9 +529,6 @@ function spawnPreview() {
 function updateNextPreviewUI() {
     const slot1 = document.getElementById('next-ball-1');
     if (!slot1) return;
-
-    // 遊戲尚未開始前，因為軌道上還沒有球，所以「Next」預覽顯示為第一顆即將出現的球（previewBall）
-    // 遊戲開始後軌道上已經有球了，所以「Next」顯示為再下一顆即將出現的球（upcomingLevels[0]）
     let lvl = upcomingLevels[0];
     if (!isPlaying && previewBall) {
         lvl = previewBall.level;
@@ -678,14 +717,29 @@ function resetGame() {
     spawnPreview();
 }
 
-// Helper to play SFX (clone node to allow overlapping)
+// Helper to play SFX (clone node and connect to master gain)
 function playSound(audio) {
-    if (audio.volume > 0) {
-        const clone = audio.cloneNode();
-        clone.volume = audio.volume;
-        clone.play().catch(e => console.warn('Audio play failed', e));
+    if (sfxVolume <= 0) return;
+
+    const clone = audio.cloneNode();
+
+    // Connect to Web Audio master sfx gain if supported
+    if (audioCtx && sfxGainNode) {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        try {
+            const source = audioCtx.createMediaElementSource(clone);
+            source.connect(sfxGainNode);
+        } catch (e) {
+            // Browser limit or already connected?
+            clone.volume = sfxVolume;
+        }
+    } else {
+        clone.volume = sfxVolume;
     }
+
+    clone.play().catch(e => console.warn('Audio play failed', e));
 }
+
 
 // Global UI Handlers
 if (retryBtnTop) retryBtnTop.addEventListener('click', resetGame);
@@ -729,7 +783,14 @@ if (closeEdBtn) {
 
 bgmSlider.addEventListener('input', (e) => {
     bgmVolume = e.target.value / 100;
-    bgm.volume = bgmVolume;
+
+    // BGM volume adjustment (Web Audio Gain)
+    if (bgmGainNode) {
+        bgmGainNode.gain.setTargetAtTime(bgmVolume, audioCtx.currentTime, 0.01);
+    } else {
+        bgm.volume = bgmVolume; // Fallback
+    }
+
     if (bgmVolume > 0 && bgm.paused) {
         bgm.play().catch(e => console.warn("BGM play failed", e));
     }
@@ -737,9 +798,17 @@ bgmSlider.addEventListener('input', (e) => {
 
 sfxSlider.addEventListener('input', (e) => {
     sfxVolume = e.target.value / 100;
-    clickSound.volume = sfxVolume;
-    mergeSound.volume = sfxVolume;
+
+    // SFX volume adjustment (Web Audio Gain)
+    if (sfxGainNode) {
+        sfxGainNode.gain.setTargetAtTime(sfxVolume, audioCtx.currentTime, 0.01);
+    } else {
+        // Fallback
+        clickSound.volume = sfxVolume;
+        mergeSound.volume = sfxVolume;
+    }
 });
+
 
 const eduToggle = document.getElementById('edu-toggle');
 if (eduToggle) {
