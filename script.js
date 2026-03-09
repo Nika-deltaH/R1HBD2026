@@ -204,9 +204,9 @@ function createCapsule(x, y, radius, renderConfig) {
 
     return Body.create({
         parts: [c1, c2, c3],
-        restitution: 0.7,
+        restitution: 0.85, // Higher bounce
         friction: 0.05,
-        frictionAir: 0.01,
+        frictionAir: 0.005, // More lively movement
         render: { visible: false }
     });
 }
@@ -214,10 +214,11 @@ function createCapsule(x, y, radius, renderConfig) {
 function init() {
     // Create Engine
     engine = Engine.create({
-        positionIterations: 6,
-        velocityIterations: 4
+        enableSleeping: true,
+        positionIterations: 10,
+        velocityIterations: 8
     });
-    engine.world.gravity.y = 1.5; // Downward gravity
+    engine.world.gravity.y = 1.5; // Restore original gravity
 
     // Create Renderer
     render = Render.create({
@@ -228,7 +229,7 @@ function init() {
             height: GAME_H,
             wireframes: false,
             background: 'transparent',
-            pixelRatio: Math.min(window.devicePixelRatio, 2)
+            pixelRatio: 1 // Force pixelRatio 1 for performance on mobile
         }
     });
 
@@ -274,19 +275,34 @@ function init() {
 
         // 5. Drawing All Physical Balls (Images)
         const bodies = Composite.allBodies(engine.world);
-        bodies.forEach(body => {
-            if (body.level === undefined || body.isStatic) return;
+        for (let i = 0; i < bodies.length; i++) {
+            const body = bodies[i];
+            if (body.level === undefined || body.isStatic || body.isRemoved) continue;
 
             if (USE_IMAGES) {
-                const imageIndex = String(body.level + 1).padStart(3, '0');
-                const img = ASSET_IMAGES[imageIndex];
-                if (img) {
+                // Optimization: Cache image reference on body if not present
+                if (!body.assetImg) {
+                    const imageIndex = String(body.level + 1).padStart(3, '0');
+                    body.assetImg = ASSET_IMAGES[imageIndex];
+                }
+
+                if (body.assetImg) {
                     const r = BALL_RADII[body.level];
-                    const size = r * 2;
+                    let size = r * 2;
+
+                    // Visual-only Pop Effect (Visual scaling doesn't affect physics)
+                    if (body.popScale === undefined) body.popScale = 1.0;
+                    if (body.isPopping) {
+                        body.popScale += 0.05;
+                        if (body.popScale >= 1.25) body.isPopping = false;
+                    } else if (body.popScale > 1.0) {
+                        body.popScale -= 0.05;
+                    }
+
                     ctx.save();
                     ctx.translate(body.position.x, body.position.y);
                     ctx.rotate(body.angle);
-                    ctx.drawImage(img, -r, -r, size, size);
+                    ctx.drawImage(body.assetImg, -r * body.popScale, -r * body.popScale, size * body.popScale, size * body.popScale);
                     ctx.restore();
                 }
             } else {
@@ -296,7 +312,7 @@ function init() {
                 ctx.fillStyle = BALL_COLORS[body.level];
                 ctx.fill();
             }
-        });
+        }
 
         // 6. Preview Ball (Current held ball)
         if (previewBall && isPlaying) {
@@ -352,15 +368,16 @@ function init() {
         let gameOverTriggered = false;
         const bodies = Composite.allBodies(engine.world);
 
-        bodies.forEach(body => {
-            if (body.isStatic) return;
+        for (let i = 0; i < bodies.length; i++) {
+            const body = bodies[i];
+            if (body.isStatic || body.isRemoved) continue;
 
-            // Use actual physics bounds for accurate edge detection (especially for capsule/ellipses)
+            // Use actual physics bounds for accurate edge detection
             const topEdge = body.bounds.min.y;
 
             // Warning Check: top edge above WARNING_TRIGGER_Y
             if (topEdge < WARNING_TRIGGER_Y) {
-                if (body.id !== (lastShotBodyId || -1)) {
+                if (body.id !== lastShotBodyId) {
                     warningTriggered = true;
                 } else if (body.speed < 2) {
                     warningTriggered = true;
@@ -369,26 +386,16 @@ function init() {
 
             // Game Over Check: top edge above GAMEOVER_Y and nearly stopped
             if (topEdge < GAMEOVER_Y) {
-                if (body.speed < 0.5 && body.id !== (lastShotBodyId || -1)) {
+                if (body.speed < 0.5 && body.id !== lastShotBodyId) {
                     gameOverTriggered = true;
                 }
             }
 
-            // Pop Animation
-            if (body.isPopping) {
-                const targetRadius = BALL_RADII[body.level];
-                // For composite bodies (capsule), scaling might be complex, 
-                // but Matter.js Body.scale handles parts recursively.
-                if (body.circleRadius && body.circleRadius > targetRadius + 0.5) {
-                    Body.scale(body, 0.95, 0.95);
-                } else if (!body.circleRadius) {
-                    // Fallback for composite
-                    body.isPopping = false;
-                } else {
-                    body.isPopping = false;
-                }
+            // Cleanup flag
+            if (body.isRemoved) {
+                // Already handled by World.remove, but keep logic clean
             }
-        });
+        }
 
         isWarningActive = warningTriggered;
 
@@ -407,10 +414,11 @@ function init() {
     Events.on(engine, 'collisionStart', (event) => {
         const pairs = event.pairs;
         for (let i = 0; i < pairs.length; i++) {
-            const bodyA = pairs[i].bodyA.parent; // Use parent for composite body support
-            const bodyB = pairs[i].bodyB.parent;
+            const pair = pairs[i];
+            const bodyA = pair.bodyA.parent; // Use parent for composite body support
+            const bodyB = pair.bodyB.parent;
 
-            if (bodyA.level !== undefined && bodyB.level !== undefined) {
+            if (bodyA.level !== undefined && bodyB.level !== undefined && !bodyA.isRemoved && !bodyB.isRemoved) {
                 if (bodyA.level === bodyB.level && bodyA.level < 12) { // 13 levels (0-12)
                     mergeBalls(bodyA, bodyB);
                 }
@@ -559,13 +567,14 @@ function shoot() {
     // Clamp spawn X inside play field
     const spawnX = Math.max(FIELD_LEFT + previewBall.radius, Math.min(FIELD_RIGHT - previewBall.radius, previewBall.x));
 
+    let body;
     if (previewBall.level === 5) {
         body = createCapsule(spawnX, DROP_Y, previewBall.radius);
     } else {
         body = Bodies.circle(spawnX, DROP_Y, previewBall.radius, {
-            restitution: 0.7,
+            restitution: 0.85, // Higher bounce
             friction: 0.05,
-            frictionAir: 0.01,
+            frictionAir: 0.005, // More slippery/cute 
             render: { visible: false }
         });
     }
@@ -573,8 +582,8 @@ function shoot() {
     body.level = previewBall.level;
     lastShotBodyId = body.id;
 
-    // Drop straight down
-    Body.setVelocity(body, { x: 0, y: 5 });
+    // Drop straight down with slight variations
+    Body.setVelocity(body, { x: 0, y: 3 });
 
     playSound(clickSound);
     World.add(engine.world, body);
@@ -623,20 +632,33 @@ function mergeBalls(bodyA, bodyB) {
         newBody = createCapsule(midX, midY, radius);
     } else {
         newBody = Bodies.circle(midX, midY, radius, {
-            restitution: 0.7,
+            restitution: 0.85,
             friction: 0.05,
-            frictionAir: 0.02,
+            frictionAir: 0.005,
             render: { visible: false }
         });
     }
     newBody.level = newLevel;
-    Body.setVelocity(newBody, { x: (Math.random() - 0.5), y: (Math.random() - 0.5) });
 
-    // Pop Animation
-    Body.scale(newBody, 1.1, 1.1);
+    // Set a random velocity to give it a "kick" and wake up neighbors
+    Body.setVelocity(newBody, { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 });
+
     newBody.isPopping = true;
+    newBody.popScale = 1.0;
 
     World.add(engine.world, newBody);
+
+    // Wake up nearby bodies to prevent floating balls
+    const bodies = Composite.allBodies(engine.world);
+    const wakeRange = radius * 4;
+    for (let i = 0; i < bodies.length; i++) {
+        const b = bodies[i];
+        if (b.isStatic || b === newBody) continue;
+        const dist = Vector.magnitude(Vector.sub(b.position, newBody.position));
+        if (dist < wakeRange) {
+            Matter.Sleeping.set(b, false);
+        }
+    }
 }
 
 function endGame() {
