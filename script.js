@@ -66,6 +66,69 @@ const CM_DATA = [
 // Upcoming queue
 let upcomingLevels = [];
 
+// --- OBJECT POOLING ---
+const BODY_POOL = {}; // { level: [bodies...] }
+const MAX_POOL_SIZE_PER_LEVEL = 10;
+
+function getBodyFromPool(level, x, y, radius) {
+    if (!BODY_POOL[level]) BODY_POOL[level] = [];
+
+    // Find an inactive body
+    let body = BODY_POOL[level].find(b => !b.isActive);
+
+    if (body) {
+        body.isActive = true;
+        body.isRemoved = false;
+        body.isPopping = false;
+        body.popScale = 1.0;
+        body.id = Matter.Common.nextId(); // Refresh ID for collision tracking
+        Body.setPosition(body, { x, y });
+
+        // Add tiny random rotation so it doesn't stay perfectly balanced (crucial for capsules)
+        const startAngle = (Math.random() - 0.5) * 0.2;
+        Body.setAngle(body, startAngle);
+
+        Body.setVelocity(body, { x: 0, y: 0 });
+        Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.05);
+        return body;
+    }
+
+    // Create new if none available or pool not full
+    const commonOpts = {
+        restitution: 0.7, // Increased for a livelier feel
+        friction: 0.05,
+        frictionAir: 0.01, // Lighter air resistance
+        render: { visible: false }
+    };
+
+    if (level === 5) {
+        body = createCapsule(x, y, radius);
+    } else {
+        body = Bodies.circle(x, y, radius, commonOpts);
+    }
+
+    body.level = level;
+    body.isActive = true;
+    body.assetImg = ASSET_IMAGES[String(level + 1).padStart(3, '0')];
+
+    // Non-zero start angle/spin for natural tumbling
+    Body.setAngle(body, (Math.random() - 0.5) * 0.2);
+    Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.05);
+
+    if (BODY_POOL[level].length < MAX_POOL_SIZE_PER_LEVEL) {
+        BODY_POOL[level].push(body);
+    }
+    return body;
+}
+
+function releaseToPool(body) {
+    if (body.level === undefined) return;
+    body.isActive = false;
+    body.isRemoved = true;
+    World.remove(engine.world, body);
+}
+// -----------------------
+
 // The ball currently hovering at top, waiting to be dropped
 let previewBall = null;
 let spawnTimeoutId = null;
@@ -204,9 +267,9 @@ function createCapsule(x, y, radius, renderConfig) {
 
     return Body.create({
         parts: [c1, c2, c3],
-        restitution: 0.85, // Higher bounce
+        restitution: 0.85, // Balanced bounce
         friction: 0.05,
-        frictionAir: 0.005, // More lively movement
+        frictionAir: 0.010,
         render: { visible: false }
     });
 }
@@ -220,7 +283,8 @@ function init() {
     });
     engine.world.gravity.y = 1.5; // Restore original gravity
 
-    // Create Renderer
+    // Create Renderer with Adaptive DPR
+    const dpr = Math.min(window.devicePixelRatio, 2);
     render = Render.create({
         element: document.getElementById('game-container'),
         engine: engine,
@@ -229,9 +293,13 @@ function init() {
             height: GAME_H,
             wireframes: false,
             background: 'transparent',
-            pixelRatio: 1 // Force pixelRatio 1 for performance on mobile
+            pixelRatio: dpr // Use DPR for Retina scaling
         }
     });
+
+    // Explicitly set canvas style for CSS scaling
+    render.canvas.style.width = GAME_W + 'px';
+    render.canvas.style.height = GAME_H + 'px';
 
     // Create Walls (left, right, bottom) — aligned to play field
     const wallOpts = { isStatic: true, render: { fillStyle: 'transparent' } };
@@ -483,8 +551,13 @@ function handleInput(e) {
         const rect = render.canvas.getBoundingClientRect();
         const scaleX = GAME_W / rect.width;
         const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        dropX = Math.max(0, Math.min(GAME_W, (clientX - rect.left) * scaleX));
+        dropX = Math.max(FIELD_LEFT, Math.min(FIELD_RIGHT, (clientX - rect.left) * scaleX));
         if (previewBall) previewBall.x = dropX;
+    }
+
+    // Audio Context Resilience: Resume on every interaction
+    if (audioCtx && audioCtx.state === 'suspended') {
+        audioCtx.resume();
     }
 
     shoot();
@@ -567,23 +640,13 @@ function shoot() {
     // Clamp spawn X inside play field
     const spawnX = Math.max(FIELD_LEFT + previewBall.radius, Math.min(FIELD_RIGHT - previewBall.radius, previewBall.x));
 
-    let body;
-    if (previewBall.level === 5) {
-        body = createCapsule(spawnX, DROP_Y, previewBall.radius);
-    } else {
-        body = Bodies.circle(spawnX, DROP_Y, previewBall.radius, {
-            restitution: 0.85, // Higher bounce
-            friction: 0.05,
-            frictionAir: 0.005, // More slippery/cute 
-            render: { visible: false }
-        });
-    }
+    // Use Object Pool instead of New Bodies
+    const body = getBodyFromPool(previewBall.level, spawnX, DROP_Y, previewBall.radius);
 
-    body.level = previewBall.level;
     lastShotBodyId = body.id;
 
-    // Drop straight down with slight variations
-    Body.setVelocity(body, { x: 0, y: 3 });
+    // Drop straight down with much gentler force
+    Body.setVelocity(body, { x: 0, y: 2 });
 
     playSound(clickSound);
     World.add(engine.world, body);
@@ -595,14 +658,14 @@ function shoot() {
 
 function mergeBalls(bodyA, bodyB) {
     if (bodyA.isRemoved || bodyB.isRemoved) return;
-    bodyA.isRemoved = true;
-    bodyB.isRemoved = true;
 
     const midX = (bodyA.position.x + bodyB.position.x) / 2;
     const midY = (bodyA.position.y + bodyB.position.y) / 2;
     const newLevel = bodyA.level + 1;
 
-    World.remove(engine.world, [bodyA, bodyB]);
+    // Release to Pool instead of Just Removing
+    releaseToPool(bodyA);
+    releaseToPool(bodyB);
 
     score += (newLevel + 1) * 10;
     scoreEl.textContent = score;
@@ -627,21 +690,13 @@ function mergeBalls(bodyA, bodyB) {
         fillStyle: BALL_COLORS[newLevel]
     };
 
-    let newBody;
-    if (newLevel === 5) {
-        newBody = createCapsule(midX, midY, radius);
-    } else {
-        newBody = Bodies.circle(midX, midY, radius, {
-            restitution: 0.85,
-            friction: 0.05,
-            frictionAir: 0.005,
-            render: { visible: false }
-        });
-    }
+    // Use Object Pool for Merged Fruit
+    const newBody = getBodyFromPool(newLevel, midX, midY, radius);
+
     newBody.level = newLevel;
 
     // Set a random velocity to give it a "kick" and wake up neighbors
-    Body.setVelocity(newBody, { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 2 });
+    Body.setVelocity(newBody, { x: (Math.random() - 0.5) * 1.5, y: (Math.random() - 0.5) * 1.5 });
 
     newBody.isPopping = true;
     newBody.popScale = 1.0;
@@ -844,6 +899,11 @@ document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
         bgm.pause();
     } else {
+        // Audio Recovery: Resume Context and BGM
+        if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume();
+        }
+
         // Resume BGM if it should be playing (game started and not muted)
         if (isPlaying && bgmVolume > 0) {
             bgm.play().catch(e => console.warn("BGM resume failed", e));
