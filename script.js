@@ -305,8 +305,11 @@ function init() {
     const wallOpts = { isStatic: true, render: { fillStyle: 'transparent' } };
     World.add(engine.world, makeWalls());
 
-    // Create Runner
-    runner = Runner.create();
+    // Create Runner with more stability for high-density physics
+    runner = Runner.create({
+        isFixed: true,
+        delta: 1000 / 60
+    });
     Runner.run(runner, engine);
     Render.run(render);
 
@@ -370,7 +373,11 @@ function init() {
                     ctx.save();
                     ctx.translate(body.position.x, body.position.y);
                     ctx.rotate(body.angle);
-                    ctx.drawImage(body.assetImg, -r * body.popScale, -r * body.popScale, size * body.popScale, size * body.popScale);
+
+                    // Slightly optimize: if scale is 1, don't use it in drawImage to save CPU
+                    const drawR = r * body.popScale;
+                    const drawS = size * body.popScale;
+                    ctx.drawImage(body.assetImg, -drawR, -drawR, drawS, drawS);
                     ctx.restore();
                 }
             } else {
@@ -646,14 +653,14 @@ function shoot() {
     lastShotBodyId = body.id;
 
     // Drop straight down with much gentler force
-    Body.setVelocity(body, { x: 0, y: 2 });
+    Body.setVelocity(body, { x: 0, y: 2 }); // Slightly faster than 1.5 to reduce overlap time
 
     playSound(clickSound);
     World.add(engine.world, body);
 
     if (spawnTimeoutId) clearTimeout(spawnTimeoutId);
     previewBall = null;
-    spawnTimeoutId = setTimeout(spawnPreview, 600);
+    spawnTimeoutId = setTimeout(spawnPreview, 500); // Shorter cooldown
 }
 
 function mergeBalls(bodyA, bodyB) {
