@@ -131,7 +131,8 @@ function releaseToPool(body) {
 
 // The ball currently hovering at top, waiting to be dropped
 let previewBall = null;
-let spawnTimeoutId = null;
+let spawnTimer = 0; // Frame-based timer instead of setTimeout
+const SPAWN_COOLDOWN = 30; // ~0.5s at 60fps
 let dropX = (FIELD_LEFT + FIELD_RIGHT) / 2; // horizontal center of play field
 
 // Elements
@@ -483,6 +484,15 @@ function init() {
         } else {
             gameOverCounter = 0;
         }
+
+        // --- NEW: Frame-based Spawn Management ---
+        if (!previewBall && isPlaying && !isGameOver) {
+            spawnTimer++;
+            if (spawnTimer >= SPAWN_COOLDOWN) {
+                spawnPreview();
+                spawnTimer = 0;
+            }
+        }
     });
 
     // Collision & Merge Logic
@@ -565,6 +575,11 @@ function handleInput(e) {
     // Audio Context Resilience: Resume on every interaction
     if (audioCtx && audioCtx.state === 'suspended') {
         audioCtx.resume();
+    }
+
+    // Ensure CM Window isn't blocking input via logic
+    if (!document.getElementById('cm-window').classList.contains('hidden')) {
+        return;
     }
 
     shoot();
@@ -658,9 +673,8 @@ function shoot() {
     playSound(clickSound);
     World.add(engine.world, body);
 
-    if (spawnTimeoutId) clearTimeout(spawnTimeoutId);
     previewBall = null;
-    spawnTimeoutId = setTimeout(spawnPreview, 500); // Shorter cooldown
+    spawnTimer = 0; // Reset frame timer
 }
 
 function mergeBalls(bodyA, bodyB) {
@@ -769,11 +783,6 @@ function showEDWindow() {
 }
 
 function resetGame() {
-    if (spawnTimeoutId) {
-        clearTimeout(spawnTimeoutId);
-        spawnTimeoutId = null;
-    }
-
     World.clear(engine.world);
     Engine.clear(engine);
 
@@ -788,6 +797,7 @@ function resetGame() {
     maxLevelReached = 0;
     upcomingLevels = [];
     previewBall = null;
+    spawnTimer = 0;
     dropX = (FIELD_LEFT + FIELD_RIGHT) / 2; // center of play field
     gameHeader.classList.add('hidden');
     gameFooter.classList.add('hidden');
