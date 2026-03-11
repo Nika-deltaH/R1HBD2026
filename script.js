@@ -14,7 +14,8 @@ const FIELD_BOTTOM = 600;    // Bottom wall inner face
 const FIELD_LEFT = 40;     // Left wall inner face
 const FIELD_RIGHT = 340;    // Right wall inner face  (350px wide field)
 const DROP_Y = 140;     // Preview ball Y (above gameover line, inside UI area)
-const WALL_THICKNESS = 30;
+const WALL_THICKNESS = 500;   // Much thicker physical walls to prevent tunneling
+const VISUAL_WALL_THICKNESS = 30; // Original thickness for layout logic if needed
 
 // Sizes: 25, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130 (Diameters)
 // Radii: 12.5, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65
@@ -41,6 +42,7 @@ let score = 0;
 let isGameOver = false;
 let isPlaying = false;
 let isWarningActive = false;
+let isPaused = false;
 let gameOverCounter = 0;
 const GAMEOVER_THRESHOLD = 30; // 0.5 seconds at 60fps
 
@@ -50,8 +52,8 @@ let maxLevelReached = 0;
 let isEduEnabled = true; // 教育內容開關 (唐突衛教)
 const CM_DATA = [
     { img: 'cm_01', link: 'https://youtube.com/shorts/1Zzu1lTNThw?si=zJ97SKU9Z0sM6l0o' }, //大腸桿菌之戰
-    { img: 'cm_02', link: 'https://youtube.com/shorts/jKMBcdd-oac?si=-jFzEUbNKsEFHv_2' }, //水痘與帶狀疱疹(玫瑰花瓣上的露珠)
-    { img: 'cm_03', link: 'https://youtube.com/shorts/XI5j6NeBA9g?si=B94VK5XYgSzy2T42' }, //成人篩檢肝腎功能尿酸
+    { img: 'cm_02', link: 'https://youtube.com/shorts/jKMBcdd-oac?si=-jFzEUbNKcEFHv_2' }, //水痘與帶狀疱疹(玫瑰花瓣上的露珠)
+    { img: 'cm_03', link: 'https://youtube.com/shorts/XI5j6NeBA9g?si=B94VK5XYSzy2T42' }, //成人篩檢肝腎功能尿酸
     { img: 'cm_04', link: 'https://www.youtube.com/watch?v=PdWnGcRcjWo' }, //左流右新健康安心
     { img: 'cm_05', link: 'https://www.youtube.com/watch?v=W6auYLrj7KI' }, //實寫注意!深入了解大腸癌
     { img: 'cm_06', link: 'https://www.youtube.com/watch?v=svqq5stpB_Q' }, //頭家，來一份快樂套餐!
@@ -98,6 +100,7 @@ function getBodyFromPool(level, x, y, radius) {
         restitution: 0.7, // Increased for a livelier feel
         friction: 0.05,
         frictionAir: 0.01, // Lighter air resistance
+        slop: 0.05,       // Reduced micro-calculations for stable stacking
         render: { visible: false }
     };
 
@@ -131,8 +134,8 @@ function releaseToPool(body) {
 
 // The ball currently hovering at top, waiting to be dropped
 let previewBall = null;
-let spawnTimer = 0; // Frame-based timer instead of setTimeout
-const SPAWN_COOLDOWN = 30; // ~0.5s at 60fps
+let spawnTimer = 0;
+const SPAWN_COOLDOWN = 18; // Reduced for better responsiveness (~0.3s)
 let dropX = (FIELD_LEFT + FIELD_RIGHT) / 2; // horizontal center of play field
 
 // Elements
@@ -245,15 +248,15 @@ async function preloadAssets() {
 }
 
 function makeWalls() {
-    const opts = { isStatic: true, restitution: 0.7, render: { fillStyle: 'transparent' } };
+    const opts = { isStatic: true, restitution: 0.7, friction: 0.1, render: { fillStyle: 'transparent' } };
     const cx = (FIELD_LEFT + FIELD_RIGHT) / 2; // horizontal center of field
     return [
-        // Bottom
-        Bodies.rectangle(cx, FIELD_BOTTOM + WALL_THICKNESS / 2, FIELD_RIGHT - FIELD_LEFT, WALL_THICKNESS, opts),
+        // Bottom (thick for high pressure)
+        Bodies.rectangle(cx, FIELD_BOTTOM + WALL_THICKNESS / 2, 2000, WALL_THICKNESS, opts),
         // Left
-        Bodies.rectangle(FIELD_LEFT - WALL_THICKNESS / 2, GAME_H / 2, WALL_THICKNESS, GAME_H * 2, opts),
+        Bodies.rectangle(FIELD_LEFT - WALL_THICKNESS / 2, GAME_H / 2, WALL_THICKNESS, GAME_H * 4, opts),
         // Right
-        Bodies.rectangle(FIELD_RIGHT + WALL_THICKNESS / 2, GAME_H / 2, WALL_THICKNESS, GAME_H * 2, opts),
+        Bodies.rectangle(FIELD_RIGHT + WALL_THICKNESS / 2, GAME_H / 2, WALL_THICKNESS, GAME_H * 4, opts),
     ];
 }
 
@@ -270,7 +273,8 @@ function createCapsule(x, y, radius, renderConfig) {
         parts: [c1, c2, c3],
         restitution: 0.85, // Balanced bounce
         friction: 0.05,
-        frictionAir: 0.010,
+        frictionAir: 0.01,
+        slop: 0.05,
         render: { visible: false }
     });
 }
@@ -294,25 +298,65 @@ function init() {
             height: GAME_H,
             wireframes: false,
             background: 'transparent',
-            pixelRatio: dpr // Use DPR for Retina scaling
+            pixelRatio: dpr
         }
     });
 
     // Explicitly set canvas style for CSS scaling
     render.canvas.style.width = GAME_W + 'px';
     render.canvas.style.height = GAME_H + 'px';
+    render.canvas.style.touchAction = 'none'; // CRITICAL: Stop mobile gesture latency
 
-    // Create Walls (left, right, bottom) — aligned to play field
-    const wallOpts = { isStatic: true, render: { fillStyle: 'transparent' } };
+    // Create Walls
     World.add(engine.world, makeWalls());
 
-    // Create Runner with more stability for high-density physics
-    runner = Runner.create({
-        isFixed: true,
-        delta: 1000 / 60
-    });
-    Runner.run(runner, engine);
-    Render.run(render);
+    // --- High Performance Physics Loop (Accumulator + Circuit Breaker) ---
+    let lastTime = 0;
+    let accumulator = 0;
+    const delta = 1000 / 60; // Target 60fps physics step
+
+    function gameLoop(time) {
+        if (!lastTime) lastTime = time;
+        let frameTime = time - lastTime;
+        lastTime = time;
+
+        // Caps to prevent Death Spiral (max 250ms)
+        if (frameTime > 250) frameTime = 250;
+        accumulator += frameTime;
+
+        // Physics & Game Logic (Skip if paused)
+        if (!isPaused && !isGameOver) {
+            let updatesThisFrame = 0;
+            const maxUpdates = 2; // Circuit Breaker
+
+            while (accumulator >= delta) {
+                if (updatesThisFrame < maxUpdates) {
+                    Engine.update(engine, delta);
+                    // Move the warning/endgame checks inside or after update? 
+                    // Let's keep them in the loop or right after.
+                    updatesThisFrame++;
+                }
+                accumulator -= delta;
+            }
+        }
+
+        // Render (Keep rendering even if paused so UI is visible)
+        Render.world(render);
+
+        requestAnimationFrame(gameLoop);
+    }
+
+    // Start custom loop
+    requestAnimationFrame(gameLoop);
+
+    // Pre-allocate Pool to prevent "First Drop Lag"
+    for (let lvl = 0; lvl <= 3; lvl++) {
+        for (let i = 0; i < 4; i++) {
+            const tempBody = getBodyFromPool(lvl, -1000, -1000, BALL_RADII[lvl]);
+            tempBody.isActive = false; // Ensure it's marked inactive
+            World.remove(engine.world, tempBody);
+        }
+    }
 
     // Initial message
     showStartMessage();
@@ -438,7 +482,7 @@ function init() {
 
     // Physics Loop Updates
     Events.on(engine, 'beforeUpdate', () => {
-        if (isGameOver) return;
+        if (isGameOver || isPaused) return; // Added isPaused check here too
 
         let warningTriggered = false;
         let gameOverTriggered = false;
@@ -522,20 +566,16 @@ function init() {
         return Math.max(FIELD_LEFT, Math.min(FIELD_RIGHT, (clientX - rect.left) * scaleX));
     }
 
-    container.addEventListener('mousemove', (e) => {
+    // Unified Input Event Pointerdown
+    container.addEventListener('pointerdown', handleInput, { passive: false });
+
+    // Update drop X (Preview follows pointer)
+    container.addEventListener('pointermove', (e) => {
         if (!isPlaying || isGameOver || !previewBall) return;
-        dropX = getGameX(e);
-        previewBall.x = dropX;
-    });
-    container.addEventListener('touchmove', (e) => {
-        if (!isPlaying || isGameOver || !previewBall) return;
-        e.preventDefault();
+        if (e.cancelable) e.preventDefault();
         dropX = getGameX(e);
         previewBall.x = dropX;
     }, { passive: false });
-
-    container.addEventListener('mousedown', handleInput);
-    container.addEventListener('touchstart', handleInput, { passive: false });
 
     spawnPreview();
 }
@@ -543,9 +583,10 @@ function init() {
 let lastShotBodyId = null;
 
 function handleInput(e) {
+    // Unify input filtering
     if (e.target.tagName === 'BUTTON' || e.target.parentElement.tagName === 'BUTTON') return;
-    if (e.type === 'touchstart') e.preventDefault();
-    if (isGameOver) return;
+    if (e.cancelable) e.preventDefault();
+    if (isGameOver || isPaused) return; // Added isPaused check here
 
     initAudioContext();
 
@@ -553,38 +594,28 @@ function handleInput(e) {
         isPlaying = true;
         const msg = document.getElementById('start-message');
         if (msg) msg.style.display = 'none';
-
-        // Show the next ball preview once game starts
         updateNextPreviewUI();
-
-        // Try play BGM on first interaction
         if (bgm.paused && bgmVolume > 0) {
-            bgm.play().catch(e => console.log("BGM waiting for interaction"));
+            bgm.play().catch(e => console.log("BGM interaction waiting"));
         }
     }
 
-    // Update drop X from the click/touch position
+    // Modal blocking - checks by class (faster than ID lookup every frame)
+    if (!document.getElementById('cm-window').classList.contains('hidden') ||
+        !document.getElementById('settings-modal').classList.contains('hidden')) {
+        return;
+    }
+
+    // Direct X update from event for zero-latency response
     if (render && render.canvas) {
         const rect = render.canvas.getBoundingClientRect();
         const scaleX = GAME_W / rect.width;
-        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-        dropX = Math.max(FIELD_LEFT, Math.min(FIELD_RIGHT, (clientX - rect.left) * scaleX));
+        dropX = Math.max(FIELD_LEFT, Math.min(FIELD_RIGHT, (e.clientX - rect.left) * scaleX));
         if (previewBall) previewBall.x = dropX;
-    }
-
-    // Audio Context Resilience: Resume on every interaction
-    if (audioCtx && audioCtx.state === 'suspended') {
-        audioCtx.resume();
-    }
-
-    // Ensure CM Window isn't blocking input via logic
-    if (!document.getElementById('cm-window').classList.contains('hidden')) {
-        return;
     }
 
     shoot();
 }
-
 
 function showStartMessage() {
     const existingMsg = document.getElementById('start-message');
@@ -763,6 +794,9 @@ function showCMWindow() {
     cmLink.href = data.link;
 
     cmWindow.classList.remove('hidden');
+
+    // Pause Engine to prevent background game over
+    isPaused = true;
 }
 
 function showEDWindow() {
@@ -806,6 +840,7 @@ function resetGame() {
     document.getElementById('cm-window').classList.add('hidden');
     document.getElementById('ed-window').classList.add('hidden');
 
+    isPaused = false;
     isPlaying = false;
     showStartMessage();
     spawnPreview();
@@ -841,10 +876,11 @@ if (retryBtn) retryBtn.addEventListener('click', resetGame);
 
 // Settings UI Handlers
 if (settingsBtn) {
-    settingsBtn.addEventListener('click', () => {
+    settingsBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         settingsModal.classList.remove('hidden');
         settingsModal.style.display = 'flex';
-        // Pause game? Maybe not, keep it flowing
+        isPaused = true; // Pause on open
     });
 }
 
@@ -852,6 +888,7 @@ if (closeSettingsBtn) {
     closeSettingsBtn.addEventListener('click', () => {
         settingsModal.classList.add('hidden');
         settingsModal.style.display = 'none';
+        isPaused = false; // Resume on close
 
         // Ensure BGM starts if it wasn't playing (user interaction)
         if (bgm.paused && bgm.volume > 0) {
@@ -865,8 +902,10 @@ const closeCmBtn = document.getElementById('close-cm');
 const closeEdBtn = document.getElementById('close-ed');
 
 if (closeCmBtn) {
-    closeCmBtn.addEventListener('click', () => {
+    closeCmBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
         document.getElementById('cm-window').classList.add('hidden');
+        isPaused = false; // Resume Engine
     });
 }
 if (closeEdBtn) {
