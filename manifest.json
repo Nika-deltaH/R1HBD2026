@@ -1,0 +1,27 @@
+{
+  "name": "天天五蔬果 健康屬於我",
+  "short_name": "五蔬果健康",
+  "description": "天天五蔬果 健康屬於我 - 遊戲",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#88b1cc",
+  "theme_color": "#88b1cc",
+  "icons": [
+    {
+      "src": "assets/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "assets/icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
