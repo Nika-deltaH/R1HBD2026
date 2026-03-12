@@ -146,32 +146,40 @@ canvas {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(136, 177, 204, 0.5);
     z-index: 20;
     display: flex;
     justify-content: center;
     align-items: center;
-    backdrop-filter: blur(5px);
+    backdrop-filter: blur(10px);
 }
 
 .modal-content {
-    background: #333;
-    padding: 30px;
-    border-radius: 15px;
-    border: 2px solid #555;
+    background: rgba(255, 255, 255, 0.9);
+    padding: 20px;
+    border-radius: 20px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
     text-align: center;
-    color: white;
-    min-width: 250px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    color: #334e68;
+    width: 80%;
+    max-width: 280px;
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+}
+
+.modal-content h2 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    font-size: 20px;
 }
 
 .setting-item {
-    margin: 20px 0;
+    margin: 15px 0;
 }
 
 .setting-item label {
     display: block;
-    margin-bottom: 10px;
+    margin-bottom: 6px;
+    font-size: 14px;
     font-weight: bold;
 }
 
@@ -187,28 +195,89 @@ canvas {
 }
 
 .toggle-setting input[type="checkbox"] {
-    width: 20px;
+    -webkit-appearance: none;
+    appearance: none;
+    width: 40px;
     height: 20px;
+    background: rgba(136, 177, 204, 0.2);
+    border-radius: 20px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.3s;
+    outline: none;
+}
+
+.toggle-setting input[type="checkbox"]::before {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.3s;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.toggle-setting input[type="checkbox"]:checked {
+    background: #88b1cc;
+}
+
+.toggle-setting input[type="checkbox"]:checked::before {
+    transform: translateX(20px);
 }
 
 .setting-item input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
     width: 100%;
+    height: 8px;
+    background: rgba(136, 177, 204, 0.2);
+    border-radius: 10px;
+    outline: none;
     cursor: pointer;
+}
+
+.setting-item input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    background: #88b1cc;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    border: 2px solid white;
+}
+
+.setting-item input[type="range"]::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    background: #88b1cc;
+    border-radius: 50%;
+    cursor: pointer;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    border: 2px solid white;
 }
 
 #close-settings {
-    margin-top: 20px;
-    padding: 8px 20px;
-    background: #4CAF50;
+    margin-top: 15px;
+    padding: 8px 25px;
+    background: #88b1cc;
     color: white;
     border: none;
-    border-radius: 5px;
+    border-radius: 50px;
     cursor: pointer;
     font-weight: bold;
+    font-size: 14px;
+    box-shadow: 0 4px 10px rgba(136, 177, 204, 0.3);
+    transition: all 0.2s;
 }
 
 #close-settings:hover {
-    background: #45a049;
+    background: #739ab4;
+    transform: scale(1.05);
 }
 
 /* Removed GO Button styling or hidden it */
@@ -355,39 +424,39 @@ canvas {
 
 /* Settings Support Section */
 .support-section {
-    margin-top: 25px;
-    padding-top: 15px;
-    border-top: 1px solid #555;
+    margin-top: 15px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(136, 177, 204, 0.2);
 }
 
 .support-section p {
-    font-size: 14px;
-    color: #aaa;
-    margin-bottom: 12px;
+    font-size: 12px;
+    color: #627d98;
+    margin-bottom: 8px;
 }
 
 .support-btns {
     display: flex;
     flex-direction: row;
-    gap: 10px;
+    gap: 8px;
 }
 
 .support-btn {
     flex: 1;
-    background: #444;
-    color: white;
-    padding: 10px;
-    border-radius: 8px;
+    background: rgba(136, 177, 204, 0.1);
+    color: #334e68;
+    padding: 8px;
+    border-radius: 10px;
     text-decoration: none;
-    font-size: 14px;
+    font-size: 13px;
     transition: all 0.2s;
-    border: 1px solid #555;
+    border: 1px solid rgba(136, 177, 204, 0.2);
 }
 
 .support-btn:hover {
-    background: #555;
+    background: rgba(136, 177, 204, 0.2);
     transform: translateY(-2px);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
 }
 
 /* In-Game Modals (CM/ED) */
