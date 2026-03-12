@@ -45,6 +45,11 @@ let isWarningActive = false;
 let isPaused = false;
 let gameOverCounter = 0;
 const GAMEOVER_THRESHOLD = 30; // 0.5 seconds at 60fps
+const delta = 1000 / 60; // Target 60fps physics step
+let isLowPerformanceMode = false;
+let slowFrameSequence = 0;
+let lastTime = 0;
+let accumulator = 0;
 
 // CM & ED globals
 let lastCMScore = 0;
@@ -310,15 +315,26 @@ function init() {
     // Create Walls
     World.add(engine.world, makeWalls());
 
-    // --- High Performance Physics Loop (Accumulator + Circuit Breaker) ---
-    let lastTime = 0;
-    let accumulator = 0;
-    const delta = 1000 / 60; // Target 60fps physics step
+    // Restore Game State if available
+    loadGameState();
 
+    // --- High Performance Physics Loop (Accumulator + Circuit Breaker) ---
     function gameLoop(time) {
         if (!lastTime) lastTime = time;
         let frameTime = time - lastTime;
         lastTime = time;
+
+        // 1. Performance Monitor & Adaptive DPR
+        if (isPlaying && !isGameOver && !isPaused) {
+            if (frameTime > 32) { // Target < 30fps
+                slowFrameSequence++;
+                if (slowFrameSequence > 60 && !isLowPerformanceMode) {
+                    enableLowPerformanceMode();
+                }
+            } else {
+                slowFrameSequence = Math.max(0, slowFrameSequence - 1);
+            }
+        }
 
         // Caps to prevent Death Spiral (max 250ms)
         if (frameTime > 250) frameTime = 250;
@@ -327,13 +343,11 @@ function init() {
         // Physics & Game Logic (Skip if paused)
         if (!isPaused && !isGameOver) {
             let updatesThisFrame = 0;
-            const maxUpdates = 2; // Circuit Breaker
+            const maxUpdates = isLowPerformanceMode ? 1 : 2; // Reduce updates if struggling
 
             while (accumulator >= delta) {
                 if (updatesThisFrame < maxUpdates) {
                     Engine.update(engine, delta);
-                    // Move the warning/endgame checks inside or after update? 
-                    // Let's keep them in the loop or right after.
                     updatesThisFrame++;
                 }
                 accumulator -= delta;
@@ -344,6 +358,25 @@ function init() {
         Render.world(render);
 
         requestAnimationFrame(gameLoop);
+    }
+
+    function enableLowPerformanceMode() {
+        if (isLowPerformanceMode) return;
+        isLowPerformanceMode = true;
+
+        // Use 1.5 as a balance between perfromance and clarity (sharper than 1.0)
+        const dpr = isLowPerformanceMode ? 1.5 : Math.min(window.devicePixelRatio, 2);
+
+        Render.setPixelRatio(render, dpr);
+        render.canvas.style.width = GAME_W + 'px';
+        render.canvas.style.height = GAME_H + 'px';
+
+        // Force smoothing to prevent jaggies
+        const ctx = render.context;
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+
+        console.log("Performance Optimized: Pixel Ratio adjusted to 1.5 for stability.");
     }
 
     // Start custom loop
@@ -406,20 +439,25 @@ function init() {
                     const r = BALL_RADII[body.level];
                     let size = r * 2;
 
-                    // Visual-only Pop Effect (Visual scaling doesn't affect physics)
+                    // Render Pressure Optimization: 
+                    // 1. Skip pop animations if sleeping or low performance
                     if (body.popScale === undefined) body.popScale = 1.0;
-                    if (body.isPopping) {
-                        body.popScale += 0.05;
-                        if (body.popScale >= 1.25) body.isPopping = false;
-                    } else if (body.popScale > 1.0) {
-                        body.popScale -= 0.05;
+                    if (!body.isSleeping && !isLowPerformanceMode) {
+                        if (body.isPopping) {
+                            body.popScale += 0.05;
+                            if (body.popScale >= 1.25) body.isPopping = false;
+                        } else if (body.popScale > 1.0) {
+                            body.popScale -= 0.05;
+                        }
+                    } else if (body.popScale !== 1.0) {
+                        body.popScale = 1.0; // Reset for sleeping bodies to save logic
                     }
 
+                    // 2. Skip draw partially? (No, but can simplify transformations)
                     ctx.save();
                     ctx.translate(body.position.x, body.position.y);
                     ctx.rotate(body.angle);
 
-                    // Slightly optimize: if scale is 1, don't use it in drawImage to save CPU
                     const drawR = r * body.popScale;
                     const drawS = size * body.popScale;
                     ctx.drawImage(body.assetImg, -drawR, -drawR, drawS, drawS);
@@ -764,6 +802,11 @@ function mergeBalls(bodyA, bodyB) {
         const dist = Vector.magnitude(Vector.sub(b.position, newBody.position));
         if (dist < wakeRange) {
             Matter.Sleeping.set(b, false);
+        } else {
+            // Optimization: If far enough and moving very slow, try to force sleep
+            if (b.speed < 0.1 && b.angularSpeed < 0.1) {
+                Matter.Sleeping.set(b, true);
+            }
         }
     }
 }
@@ -816,7 +859,64 @@ function showEDWindow() {
     edWindow.classList.remove('hidden');
 }
 
+// --- Game State Persistence ---
+function saveGameState() {
+    if (!isPlaying || isGameOver) return;
+
+    const bodies = Composite.allBodies(engine.world)
+        .filter(b => b.level !== undefined && !b.isStatic && !b.isRemoved)
+        .map(b => ({
+            x: b.position.x,
+            y: b.position.y,
+            lv: b.level,
+            a: b.angle
+        }));
+
+    const state = {
+        score,
+        bodies,
+        time: Date.now()
+    };
+
+    localStorage.setItem('R1HBD_save', JSON.stringify(state));
+    console.log("Game Saved");
+}
+
+function loadGameState() {
+    const data = localStorage.getItem('R1HBD_save');
+    if (!data) return;
+
+    try {
+        const state = JSON.parse(data);
+
+        // Only restore if save is less than 1 hour old (optional safety)
+        if (Date.now() - state.time > 3600000) {
+            localStorage.removeItem('R1HBD_save');
+            return;
+        }
+
+        score = state.score;
+        scoreEl.textContent = score;
+
+        state.bodies.forEach(b => {
+            const body = getBodyFromPool(b.lv, b.x, b.y, BALL_RADII[b.lv]);
+            Body.setAngle(body, b.a);
+            World.add(engine.world, body);
+        });
+
+        console.log("Game Restored");
+        isPlaying = true;
+        const msg = document.getElementById('start-message');
+        if (msg) msg.style.display = 'none';
+        updateNextPreviewUI();
+    } catch (e) {
+        console.error("Failed to restore game", e);
+        localStorage.removeItem('R1HBD_save');
+    }
+}
+
 function resetGame() {
+    localStorage.removeItem('R1HBD_save'); // Clear save on reset
     World.clear(engine.world);
     Engine.clear(engine);
 
@@ -954,7 +1054,12 @@ if (eduToggle) {
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
         bgm.pause();
+        saveGameState(); // Auto-save when leaving
     } else {
+        // --- 物理時間重置 ---
+        lastTime = performance.now();
+        accumulator = 0;
+
         // Audio Recovery: Resume Context and BGM
         if (audioCtx && audioCtx.state === 'suspended') {
             audioCtx.resume();
@@ -1052,11 +1157,11 @@ if (screenshotBtn) {
 if (shareBtn) {
     shareBtn.addEventListener('click', () => {
         const url = "https://nikaworx.com/R1HBD2026/";
-        const msg = `I scored ${score} in R1HBD2026! Can you beat me?`;
+        const msg = `我得到 ${score} 分！`;
 
         if (navigator.share) {
             navigator.share({
-                title: 'R1HBD2026',
+                title: '天天五蔬果 健康屬於我',
                 text: msg,
                 url: url
             }).catch(err => console.error("Share failed", err));
