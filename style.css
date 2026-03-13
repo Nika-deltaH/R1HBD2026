@@ -528,7 +528,8 @@ canvas {
     right: 8px;
     width: 24px;
     height: 24px;
-    background: transparent;
+    background: rgba(0, 0, 0, 0.5);
+    /* Semi-transparent black for visibility */
     color: #fff;
     border: 1px solid #fff;
     border-radius: 50%;
@@ -539,6 +540,20 @@ canvas {
     align-items: center;
     font-size: 14px;
     z-index: 10;
+    transition: background 0.2s;
+}
+
+.close-modal-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+}
+
+/* Specific style for ED Window where transparency looks good */
+.ed-box .close-modal-btn {
+    background: transparent;
+}
+
+.ed-box .close-modal-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
 }
 
 .cm-content {
