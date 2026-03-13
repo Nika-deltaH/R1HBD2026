@@ -94,9 +94,13 @@ function getBodyFromPool(level, x, y, radius) {
         // Add tiny random rotation so it doesn't stay perfectly balanced (crucial for capsules)
         const startAngle = (Math.random() - 0.5) * 0.2;
         Body.setAngle(body, startAngle);
-
+        Body.setStatic(body, false); // Ensure not static
         Body.setVelocity(body, { x: 0, y: 0 });
         Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.05);
+
+        // Explicitly wake it up!
+        Matter.Sleeping.set(body, false);
+
         return body;
     }
 
@@ -736,8 +740,12 @@ function shoot() {
 
     lastShotBodyId = body.id;
 
-    // Drop straight down with much gentler force
-    Body.setVelocity(body, { x: 0, y: 2 }); // Slightly faster than 1.5 to reduce overlap time
+    // --- CRITICAL FIX: Ensure body is active and affected by gravity ---
+    Body.setStatic(body, false);
+    Matter.Sleeping.set(body, false);
+
+    // Drop with a slight downward velocity and a TINY random kick to prevent "perfect balance" sticking
+    Body.setVelocity(body, { x: (Math.random() - 0.5) * 0.01, y: 2.0 });
 
     playSound(clickSound);
     World.add(engine.world, body);
