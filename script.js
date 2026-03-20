@@ -181,7 +181,7 @@ const IMAGES_TO_LOAD = [
     'assets/cm_01.png', 'assets/cm_02.png', 'assets/cm_03.png', 'assets/cm_04.png', 'assets/cm_05.png',
     'assets/cm_06.png', 'assets/cm_07.png', 'assets/cm_08.png', 'assets/cm_09.png', 'assets/cm_10.png',
     'assets/cm_11.png', 'assets/cm_12.png',
-    'assets/ed_01.jpg', 'assets/ed_02.jpg', 'assets/ed_03.jpg', 'assets/ed_04.jpg'
+    'assets/ed_01.PNG', 'assets/ed_02.PNG', 'assets/ed_03.PNG', 'assets/ed_04.PNG'
 ];
 const ASSET_IMAGES = {}; // Cache for preloaded images
 
@@ -347,7 +347,7 @@ function init() {
         // Physics & Game Logic (Skip if paused)
         if (!isPaused && !isGameOver) {
             let updatesThisFrame = 0;
-            const maxUpdates = isLowPerformanceMode ? 1 : 2; // Reduce updates if struggling
+            const maxUpdates = 3; // Allow up to 3 updates to catch up real-time physics
 
             while (accumulator >= delta) {
                 if (updatesThisFrame < maxUpdates) {
@@ -632,10 +632,11 @@ function handleInput(e) {
 
     initAudioContext();
 
+    const msg = document.getElementById('start-message');
+    if (msg) msg.style.display = 'none';
+
     if (!isPlaying) {
         isPlaying = true;
-        const msg = document.getElementById('start-message');
-        if (msg) msg.style.display = 'none';
         updateNextPreviewUI();
         if (bgm.paused && bgmVolume > 0) {
             bgm.play().catch(e => console.log("BGM interaction waiting"));
@@ -660,6 +661,7 @@ function handleInput(e) {
 }
 
 function showStartMessage() {
+    if (isPlaying) return;
     const existingMsg = document.getElementById('start-message');
     if (existingMsg) existingMsg.remove();
 
@@ -810,11 +812,6 @@ function mergeBalls(bodyA, bodyB) {
         const dist = Vector.magnitude(Vector.sub(b.position, newBody.position));
         if (dist < wakeRange) {
             Matter.Sleeping.set(b, false);
-        } else {
-            // Optimization: If far enough and moving very slow, try to force sleep
-            if (b.speed < 0.1 && b.angularSpeed < 0.1) {
-                Matter.Sleeping.set(b, true);
-            }
         }
     }
 }
@@ -855,13 +852,17 @@ function showEDWindow() {
     const edBox = document.getElementById('ed-box');
 
     let edImg = 'ed_01';
-    if (maxLevelReached <= 7) edImg = 'ed_01'; // Level 8 or below (0-indexed)
-    else if (maxLevelReached <= 9) edImg = 'ed_02'; // Level 9 or 10
-    else if (maxLevelReached === 10) edImg = 'ed_03'; // Level 11
-    else edImg = 'ed_04'; // Level 12 or above (13th level)
+    if (maxLevelReached <= 8) edImg = 'ed_01'; // Level 9 or below (index <= 8)
+    else if (maxLevelReached === 9) edImg = 'ed_02'; // Level 10 (index 9)
+    else if (maxLevelReached === 10) edImg = 'ed_03'; // Level 11 (index 10)
+    else edImg = 'ed_04'; // Level 12 or above (index >= 11)
 
+    // Check if the preloaded image exists, otherwise fallback to direct URL
     if (ASSET_IMAGES[edImg]) {
         edBox.style.backgroundImage = `url('${ASSET_IMAGES[edImg].src}')`;
+    } else {
+        // Fallback with a cache buster
+        edBox.style.backgroundImage = `url('assets/${edImg}.PNG?v=${new Date().getTime()}')`;
     }
 
     edWindow.classList.remove('hidden');
@@ -959,20 +960,13 @@ function playSound(audio) {
     if (sfxVolume <= 0) return;
 
     const clone = audio.cloneNode();
+    clone.volume = sfxVolume;
 
-    // Connect to Web Audio master sfx gain if supported
-    if (audioCtx && sfxGainNode) {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        try {
-            const source = audioCtx.createMediaElementSource(clone);
-            source.connect(sfxGainNode);
-        } catch (e) {
-            // Browser limit or already connected?
-            clone.volume = sfxVolume;
-        }
-    } else {
-        clone.volume = sfxVolume;
-    }
+    // Optional: Help iOS Safari release media element memory quicker
+    clone.addEventListener('ended', () => {
+        clone.src = '';
+        clone.remove();
+    }, { once: true });
 
     clone.play().catch(e => console.warn('Audio play failed', e));
 }
