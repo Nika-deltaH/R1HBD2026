@@ -312,8 +312,8 @@ function init() {
     });
 
     // Explicitly set canvas style for CSS scaling
-    render.canvas.style.width = GAME_W + 'px';
-    render.canvas.style.height = GAME_H + 'px';
+    render.canvas.style.width = '100%';
+    render.canvas.style.height = '100%';
     render.canvas.style.touchAction = 'none'; // CRITICAL: Stop mobile gesture latency
 
     // Create Walls
@@ -372,8 +372,8 @@ function init() {
         const dpr = isLowPerformanceMode ? 1.5 : Math.min(window.devicePixelRatio, 2);
 
         Render.setPixelRatio(render, dpr);
-        render.canvas.style.width = GAME_W + 'px';
-        render.canvas.style.height = GAME_H + 'px';
+        render.canvas.style.width = '100%';
+        render.canvas.style.height = '100%';
 
         // Force smoothing to prevent jaggies
         const ctx = render.context;
@@ -1174,6 +1174,40 @@ if (shareBtn) {
     });
 }
 
-// Start
-// init(); // Removed, called by preloadAssets
 preloadAssets();
+
+// --- Responsive UI Scaling ---
+// This ensures that the entire game logic area (380x680) and all UI elements inside
+// scale down proportionally on smaller screens without bleeding out,
+// while staying exactly at 1x size (absolute size) on large screens.
+function updateContainerScale() {
+    const wrapper = document.getElementById('main-wrapper');
+    const container = document.getElementById('game-container');
+    if (!wrapper || !container) return;
+
+    // Get padding logic from safe-area (if any)
+    const style = window.getComputedStyle(wrapper);
+    const pTop = parseFloat(style.paddingTop) || 0;
+    const pBottom = parseFloat(style.paddingBottom) || 0;
+
+    const availableWid = wrapper.clientWidth;
+    const availableHei = wrapper.clientHeight - pTop - pBottom;
+
+    // The game's absolute physical bounds
+    const baseW = 380;
+    const baseH = 680;
+
+    const scale = Math.min(
+        availableWid / baseW,
+        availableHei / baseH,
+        1 // Never scale larger than 100% (keeps absolute size on large screens)
+    );
+
+    container.style.transform = `scale(${scale})`;
+}
+
+// Observe resize and orientation changes
+window.addEventListener('resize', updateContainerScale);
+window.addEventListener('orientationchange', updateContainerScale);
+updateContainerScale(); // Initial call
+
