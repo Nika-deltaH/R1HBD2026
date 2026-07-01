@@ -166,7 +166,29 @@ canvas {
     color: #334e68;
     width: 80%;
     max-width: 280px;
+    max-height: 82svh;
+    overflow-y: auto;
     box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+    scrollbar-width: thin;
+    scrollbar-color: rgba(136, 177, 204, 0.6) transparent;
+}
+
+.modal-content::-webkit-scrollbar {
+    width: 6px;
+}
+
+.modal-content::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.modal-content::-webkit-scrollbar-button {
+    display: none;
+    background: transparent;
+}
+
+.modal-content::-webkit-scrollbar-thumb {
+    background: rgba(136, 177, 204, 0.6);
+    border-radius: 10px;
 }
 
 .modal-content h2 {
@@ -424,6 +446,42 @@ canvas {
 
 .support-links-mini a:hover {
     color: white;
+}
+
+/* Settings Save Section */
+.save-section {
+    border-top: 1px solid rgba(136, 177, 204, 0.2);
+    padding-top: 10px;
+}
+
+.save-section > label {
+    font-size: 12px;
+    color: #627d98;
+    margin-bottom: 8px;
+}
+
+.save-btns {
+    display: flex;
+    flex-direction: row;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.save-action-btn {
+    flex: 1;
+    background: rgba(136, 177, 204, 0.1);
+    color: #334e68;
+    padding: 8px;
+    border-radius: 10px;
+    font-size: 13px;
+    border: 1px solid rgba(136, 177, 204, 0.3);
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.save-action-btn:hover {
+    background: rgba(136, 177, 204, 0.25);
+    transform: translateY(-1px);
 }
 
 /* Settings Support Section */

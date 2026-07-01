@@ -194,6 +194,7 @@ let bgmSourceNode = null;
 // Audio Init Volume
 let bgmVolume = 0.5;
 let sfxVolume = 1.0;
+let isAutoMuteEnabled = true;
 
 function initAudioContext() {
     if (audioCtx) {
@@ -891,6 +892,21 @@ function saveGameState() {
     console.log("Game Saved");
 }
 
+function downloadSave() {
+    saveGameState(); // 確保 localStorage 是最新的
+    const data = localStorage.getItem('R1HBD_save');
+    if (!data) { alert('目前沒有存檔可以下載。'); return; }
+    const blob = new Blob([data], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'R1HBD_save.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
 function loadGameState() {
     const data = localStorage.getItem('R1HBD_save');
     if (!data) return;
@@ -904,6 +920,14 @@ function loadGameState() {
             return;
         }
 
+        // Clear any currently active balls first (loading can happen mid-game, e.g. via the settings upload button)
+        Composite.allBodies(engine.world)
+            .filter(b => b.level !== undefined && !b.isStatic)
+            .forEach(b => {
+                World.remove(engine.world, b);
+                b.isActive = false;
+            });
+
         score = state.score;
         scoreEl.textContent = score;
 
@@ -915,6 +939,15 @@ function loadGameState() {
 
         console.log("Game Restored");
         isPlaying = true;
+        isGameOver = false;
+        isPaused = false;
+        isWarningActive = false;
+        gameOverCounter = 0;
+        lastShotBodyId = null;
+        gameHeader.classList.add('hidden');
+        gameFooter.classList.add('hidden');
+        uiLayer.classList.remove('hidden');
+        document.getElementById('ed-window').classList.add('hidden');
         const msg = document.getElementById('start-message');
         if (msg) msg.style.display = 'none';
         updateNextPreviewUI();
@@ -1052,23 +1085,44 @@ if (eduToggle) {
     });
 }
 
+document.getElementById('auto-mute-toggle').addEventListener('change', (e) => {
+    isAutoMuteEnabled = e.target.checked;
+});
+
+document.getElementById('download-save-btn').addEventListener('click', downloadSave);
+
+document.getElementById('upload-save-btn').addEventListener('click', () => {
+    document.getElementById('upload-save-input').click();
+});
+
+document.getElementById('upload-save-input').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+        try {
+            const state = JSON.parse(ev.target.result);
+            localStorage.setItem('R1HBD_save', JSON.stringify(state));
+            loadGameState();
+            document.getElementById('settings-modal').classList.add('hidden');
+            settingsModal.style.display = 'none';
+            isPaused = false; // Resume Engine (modal closed without using closeSettingsBtn handler)
+        } catch { alert('存檔格式錯誤，無法讀取。'); }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+});
+
 // Handle tab switching / app backgrounding
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden') {
-        bgm.pause();
-        saveGameState(); // Auto-save when leaving
+        if (isAutoMuteEnabled) bgm.pause();
+        saveGameState();
     } else {
-        // --- 物理時間重置 ---
         lastTime = performance.now();
         accumulator = 0;
-
-        // Audio Recovery: Resume Context and BGM
-        if (audioCtx && audioCtx.state === 'suspended') {
-            audioCtx.resume();
-        }
-
-        // Resume BGM if it should be playing (game started and not muted)
-        if (isPlaying && bgmVolume > 0) {
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        if (isAutoMuteEnabled && isPlaying && bgmVolume > 0) {
             bgm.play().catch(e => console.warn("BGM resume failed", e));
         }
     }

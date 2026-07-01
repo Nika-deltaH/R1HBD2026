@@ -66,7 +66,7 @@
                 <div class="support-links-mini">
                     <a href="https://p.ecpay.com.tw/4D5B9BD" target="_blank">鼓勵Nika</a>
                     <a href="https://ko-fi.com/nikaworx" target="_blank">Support Nika</a>
-                    <a href="https://twitter.com/deltah_twi" target="_blank">X (Twitter)</a>
+                    <a href="https://twitter.com/nikaworx" target="_blank">X (Twitter)</a>
                 </div>
             </div>
         </div>
@@ -84,8 +84,20 @@
                     <input type="range" id="sfx-volume" min="0" max="100" value="50">
                 </div>
                 <div class="setting-item toggle-setting">
+                    <label>切換分頁自動靜音</label>
+                    <input type="checkbox" id="auto-mute-toggle" checked>
+                </div>
+                <div class="setting-item toggle-setting">
                     <label>唐突衛教</label>
                     <input type="checkbox" id="edu-toggle" checked>
+                </div>
+                <div class="setting-item save-section">
+                    <label>存檔</label>
+                    <div class="save-btns">
+                        <button id="download-save-btn" class="save-action-btn">下載存檔</button>
+                        <button id="upload-save-btn" class="save-action-btn">讀取存檔</button>
+                    </div>
+                    <input type="file" id="upload-save-input" accept=".json" style="display:none">
                 </div>
                 <div class="setting-item support-section">
                     <p>製作．美術　Nika</p>
